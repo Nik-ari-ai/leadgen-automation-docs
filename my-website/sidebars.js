@@ -9,10 +9,10 @@ const sidebars = {
       label: '1. Концепция и стейкхолдеры',
       collapsed: false,
       items: [
-        '01-concept/overview',
-        '01-concept/stakeholders',
-        '01-concept/raci-matrix',
-        '01-concept/interview-questions',
+        'concept/overview',
+        'concept/stakeholders',
+        'concept/raci-matrix',
+        'concept/interview-questions',
       ],
     },
     {
@@ -20,10 +20,10 @@ const sidebars = {
       label: '2. Требования',
       collapsed: false,
       items: [
-        '02-requirements/functional',
-        '02-requirements/non-functional',
-        '02-requirements/use-case-diagram',
-        '02-requirements/sequence-diagram',
+        'requirements/functional',
+        'requirements/non-functional',
+        'requirements/use-case-diagram',
+        'requirements/sequence-diagram',
       ],
     },
     {
@@ -31,11 +31,11 @@ const sidebars = {
       label: '3. Архитектура',
       collapsed: false,
       items: [
-        '03-architecture/c4-context',
-        '03-architecture/c4-container',
-        '03-architecture/c4-component',
-        '03-architecture/bpmn',
-        '03-architecture/dmn',
+        'architecture/c4-context',
+        'architecture/c4-container',
+        'architecture/c4-component',
+        'architecture/bpmn',
+        'architecture/dmn',
       ],
     },
     {
@@ -43,10 +43,10 @@ const sidebars = {
       label: '4. Модель данных',
       collapsed: false,
       items: [
-        '04-data-model/entities',
-        '04-data-model/erd-conceptual',
-        '04-data-model/erd-logical',
-        '04-data-model/erd-physical',
+        'data-model/entities',
+        'data-model/erd-conceptual',
+        'data-model/erd-logical',
+        'data-model/erd-physical',
       ],
     },
     {
@@ -54,7 +54,7 @@ const sidebars = {
       label: '5. UI / Экраны',
       collapsed: true,
       items: [
-        '05-ui/screens',
+        'ui/screens',
       ],
     },
     {
@@ -62,7 +62,7 @@ const sidebars = {
       label: '6. API',
       collapsed: true,
       items: [
-        '06-api/api-overview',
+        'api/api-overview',
       ],
     },
     {
@@ -70,7 +70,7 @@ const sidebars = {
       label: '7. Стратегия платформизации',
       collapsed: true,
       items: [
-        '07-platform/platformization',
+        'platform/platformization',
       ],
     },
     {
@@ -78,9 +78,9 @@ const sidebars = {
       label: '8. ADR — Architecture Decision Records',
       collapsed: true,
       items: [
-        '08-adr/adr-template',
-        '08-adr/adr-001-storage-strategy',
-        '08-adr/adr-002-ai-provider',
+        'adr/adr-template',
+        'adr/adr-001-storage-strategy',
+        'adr/adr-002-ai-provider',
       ],
     },
   ],
