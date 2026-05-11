@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             id="DMN_LeadGen_Quality"
+             name="LeadGen Enrichment Quality"
+             namespace="http://camunda.org/schema/1.0/dmn">
+
+  <!--
+    PLACEHOLDER: замени файл своим актуальным DMN из Camunda Modeler.
+    Этот файл — минимальная DMN-таблица для оценки качества AI-ответа.
+  -->
+
+  <decision id="Decision_QualityCheck" name="Оценить качество AI-ответа">
+    <decisionTable id="DecisionTable_1" hitPolicy="FIRST">
+
+      <input id="Input_FieldsFilled" label="% заполненных полей">
+        <inputExpression typeRef="number">
+          <text>fieldsFilledPercent</text>
+        </inputExpression>
+      </input>
+
+      <input id="Input_ResponseLength" label="Длина ответа AI">
+        <inputExpression typeRef="number">
+          <text>responseLength</text>
+        </inputExpression>
+      </input>
+
+      <input id="Input_FieldType" label="Тип поля">
+        <inputExpression typeRef="string">
+          <text>fieldType</text>
+        </inputExpression>
+      </input>
+
+      <input id="Input_IsRetry" label="Повторный enrichment?">
+        <inputExpression typeRef="boolean">
+          <text>isRetry</text>
+        </inputExpression>
+      </input>
+
+      <output id="Output_Decision" label="Решение" name="decision" typeRef="string" />
+      <output id="Output_Reason" label="Причина" name="reason" typeRef="string" />
+
+      <rule id="Rule_1">
+        <description>Слишком короткий ответ</description>
+        <inputEntry><text>-</text></inputEntry>
+        <inputEntry><text>&lt; 5</text></inputEntry>
+        <inputEntry><text>-</text></inputEntry>
+        <inputEntry><text>-</text></inputEntry>
+        <outputEntry><text>"reject"</text></outputEntry>
+        <outputEntry><text>"Ответ AI пустой или слишком короткий"</text></outputEntry>
+      </rule>
+
+      <rule id="Rule_2">
+        <description>Свободный текст summary</description>
+        <inputEntry><text>-</text></inputEntry>
+        <inputEntry><text>&gt;= 5</text></inputEntry>
+        <inputEntry><text>"summary"</text></inputEntry>
+        <inputEntry><text>-</text></inputEntry>
+        <outputEntry><text>"needs_review"</text></outputEntry>
+        <outputEntry><text>"Свободный текст — высокий риск галлюцинаций"</text></outputEntry>
+      </rule>
+
+      <rule id="Rule_3">
+        <description>website_summary</description>
+        <inputEntry><text>-</text></inputEntry>
+        <inputEntry><text>&gt;= 5</text></inputEntry>
+        <inputEntry><text>"website_summary"</text></inputEntry>
+        <inputEntry><text>-</text></inputEntry>
+        <outputEntry><text>"needs_review"</text></outputEntry>
+        <outputEntry><text>"Свободный текст"</text></outputEntry>
+      </rule>
+
+      <rule id="Rule_4">
+        <description>Повторный enrichment</description>
+        <inputEntry><text>-</text></inputEntry>
+        <inputEntry><text>&gt;= 5</text></inputEntry>
+        <inputEntry><text>-</text></inputEntry>
+        <inputEntry><text>true</text></inputEntry>
+        <outputEntry><text>"needs_review"</text></outputEntry>
+        <outputEntry><text>"Повторный enrichment — прошлый результат не устроил"</text></outputEntry>
+      </rule>
+
+      <rule id="Rule_5">
+        <description>Мало полей заполнено</description>
+        <inputEntry><text>&lt; 50</text></inputEntry>
+        <inputEntry><text>&gt;= 5</text></inputEntry>
+        <inputEntry><text>"role","industry"</text></inputEntry>
+        <inputEntry><text>false</text></inputEntry>
+        <outputEntry><text>"needs_review"</text></outputEntry>
+        <outputEntry><text>"Мало полей заполнено — подозрительно"</text></outputEntry>
+      </rule>
+
+      <rule id="Rule_6">
+        <description>Стандартное поле, хороший ответ</description>
+        <inputEntry><text>&gt;= 50</text></inputEntry>
+        <inputEntry><text>&gt;= 5</text></inputEntry>
+        <inputEntry><text>"role","industry","company_size"</text></inputEntry>
+        <inputEntry><text>false</text></inputEntry>
+        <outputEntry><text>"auto_accept"</text></outputEntry>
+        <outputEntry><text>"Стандартное поле, хороший ответ — принимаем"</text></outputEntry>
+      </rule>
+
+      <rule id="Rule_7">
+        <description>Fallback</description>
+        <inputEntry><text>-</text></inputEntry>
+        <inputEntry><text>-</text></inputEntry>
+        <inputEntry><text>-</text></inputEntry>
+        <inputEntry><text>-</text></inputEntry>
+        <outputEntry><text>"needs_review"</text></outputEntry>
+        <outputEntry><text>"Fallback — на проверку"</text></outputEntry>
+      </rule>
+
+    </decisionTable>
+  </decision>
+</definitions>

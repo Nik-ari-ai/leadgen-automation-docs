@@ -1,0 +1,658 @@
+openapi: 3.0.3
+info:
+  title: LeadGen Automation API
+  version: 1.0.0
+  description: |
+    REST API для подготовки баз лидов к outbound-кампаниям.
+    Покрывает импорт, дедупликацию, AI-обогащение и экспорт.
+
+    Все эндпоинты multi-tenant: путь начинается с `/tenants/{tenantId}/...`.
+    Долгие операции (импорт, enrichment, экспорт) — асинхронные, возвращают `jobId` и `202 Accepted`.
+  contact:
+    name: Arina Nikolaeva
+    url: https://github.com/Nik-ari-ai/leadgen-automation-docs
+
+servers:
+  - url: https://api.leadgen.example.com/v1
+    description: Production
+  - url: http://localhost:8000/v1
+    description: Local dev
+
+tags:
+  - name: Auth
+  - name: Leads
+  - name: Imports
+  - name: Deduplication
+  - name: Enrichment
+  - name: Exports
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Авторизация
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  user: { $ref: '#/components/schemas/User' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tenants/{tenantId}/leads:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    get:
+      tags: [Leads]
+      summary: Список лидов с пагинацией
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, default: 50, maximum: 200 }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: source
+          schema: { type: string }
+        - in: query
+          name: needsReview
+          schema: { type: boolean }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Lead' }
+                  total: { type: integer }
+                  page: { type: integer }
+
+  /tenants/{tenantId}/leads/filters:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    get:
+      tags: [Leads]
+      summary: Доступные значения для дропдаунов фильтров
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  statuses: { type: array, items: { $ref: '#/components/schemas/FilterValue' } }
+                  sources: { type: array, items: { $ref: '#/components/schemas/FilterValue' } }
+                  tags: { type: array, items: { $ref: '#/components/schemas/FilterValue' } }
+
+  /tenants/{tenantId}/leads/{leadId}:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+      - $ref: '#/components/parameters/leadId'
+    get:
+      tags: [Leads]
+      summary: Карточка лида
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Lead' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Leads]
+      summary: Ручная правка полей лида
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeadPatch' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Lead' }
+    delete:
+      tags: [Leads]
+      summary: Soft delete лида (GDPR)
+      responses:
+        '204':
+          description: Удалён
+
+  /tenants/{tenantId}/imports/previews:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    post:
+      tags: [Imports]
+      summary: Превью CSV / Google Sheets перед импортом
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                source:
+                  type: string
+                  enum: [csv, google_sheets]
+                file:
+                  type: string
+                  format: binary
+                sheetUrl:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  columns: { type: array, items: { type: string } }
+                  rows: { type: array, items: { type: object, additionalProperties: true } }
+
+  /tenants/{tenantId}/imports:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    post:
+      tags: [Imports]
+      summary: Запустить импорт
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source, mapping]
+              properties:
+                source: { type: string, enum: [csv, google_sheets] }
+                fileId: { type: string, description: ID загруженного файла из preview }
+                sheetUrl: { type: string }
+                mapping:
+                  type: object
+                  description: Маппинг колонок источника на поля системы
+                  additionalProperties: { type: string }
+      responses:
+        '202':
+          description: Принят в очередь
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  importId: { type: string }
+                  status: { type: string, enum: [queued] }
+
+  /tenants/{tenantId}/imports/{importId}:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+      - in: path
+        name: importId
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Imports]
+      summary: Статус и отчёт импорта
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportReport' }
+
+  /tenants/{tenantId}/deduplication/groups:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    get:
+      tags: [Deduplication]
+      summary: Группы дублей
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [open, merged, ignored] }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DeduplicationGroup' }
+
+  /tenants/{tenantId}/deduplication/groups/{groupId}:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+      - in: path
+        name: groupId
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Deduplication]
+      summary: Детали группы — сравнение полей
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeduplicationGroupDetails' }
+
+  /tenants/{tenantId}/deduplication/merges:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    post:
+      tags: [Deduplication]
+      summary: Выполнить merge дублей
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [groupId, masterLeadId]
+              properties:
+                groupId: { type: string }
+                masterLeadId: { type: string }
+                selectedValues:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: OK
+
+  /tenants/{tenantId}/enrichment/jobs:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    post:
+      tags: [Enrichment]
+      summary: Запустить enrichment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leadIds, promptTemplateId]
+              properties:
+                leadIds:
+                  type: array
+                  items: { type: string }
+                promptTemplateId: { type: string }
+      responses:
+        '202':
+          description: Задача в очереди
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrichmentJob' }
+
+  /tenants/{tenantId}/enrichment/jobs/{jobId}:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+      - in: path
+        name: jobId
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Enrichment]
+      summary: Статус задачи enrichment (polling)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrichmentJob' }
+
+  /tenants/{tenantId}/enrichment/jobs/{jobId}/logs:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+      - in: path
+        name: jobId
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Enrichment]
+      summary: Логи enrichment по задаче
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EnrichmentLog' }
+
+  /tenants/{tenantId}/exports:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+    post:
+      tags: [Exports]
+      summary: Создать экспорт
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [format]
+              properties:
+                format: { type: string, enum: [instantly_csv] }
+                filter:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '202':
+          description: Экспорт в обработке
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportJob' }
+
+  /tenants/{tenantId}/exports/{exportId}:
+    parameters:
+      - $ref: '#/components/parameters/tenantId'
+      - in: path
+        name: exportId
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Exports]
+      summary: Статус экспорта и ссылка на скачивание
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportJob' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    tenantId:
+      in: path
+      name: tenantId
+      required: true
+      schema: { type: string }
+      description: ID организации (tenant)
+    leadId:
+      in: path
+      name: leadId
+      required: true
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Не авторизован
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Не найдено
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    BadRequest:
+      description: Невалидный запрос
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        email: { type: string, format: email }
+        firstName: { type: string }
+        lastName: { type: string }
+        role: { type: string, enum: [admin, member] }
+
+    FilterValue:
+      type: object
+      properties:
+        value: { type: string }
+        label: { type: string }
+        sortOrder: { type: integer }
+
+    Lead:
+      type: object
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        email: { type: string, format: email }
+        linkedinUrl: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        fullName: { type: string }
+        company: { type: string }
+        website: { type: string }
+        title: { type: string }
+        industry: { type: string }
+        companySize: { type: string }
+        summary: { type: string }
+        status:
+          type: string
+          enum: [new, enriched, needs_review, ready, archived, merged]
+        source:
+          type: string
+          enum: [csv, google_sheets, manual, api]
+        tags:
+          type: array
+          items: { type: string }
+        flags:
+          type: object
+          properties:
+            needsReview: { type: boolean }
+            editedByHuman: { type: boolean }
+            duplicateCandidate: { type: boolean }
+        lastEnrichment:
+          type: object
+          properties:
+            jobId: { type: string }
+            status: { type: string }
+            reviewDecision:
+              type: string
+              enum: [auto_accept, needs_review, reject]
+            updatedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    LeadPatch:
+      type: object
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        company: { type: string }
+        title: { type: string }
+        industry: { type: string }
+        companySize: { type: string }
+        summary: { type: string }
+        status: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+
+    ImportReport:
+      type: object
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        sourceType: { type: string, enum: [csv, google_sheets] }
+        status: { type: string, enum: [preview, running, completed, partial, failed] }
+        fileName: { type: string }
+        sheetUrl: { type: string }
+        mapping: { type: object, additionalProperties: true }
+        stats:
+          type: object
+          properties:
+            totalRows: { type: integer }
+            importedRows: { type: integer }
+            rejectedRows: { type: integer }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              rowNumber: { type: integer }
+              code: { type: string }
+              message: { type: string }
+              rawRow: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+
+    DeduplicationGroup:
+      type: object
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        matchType:
+          type: string
+          enum: [email, linkedin, domain_name_similarity]
+        confidenceScore: { type: number, format: float }
+        leadCount: { type: integer }
+        status: { type: string, enum: [open, merged, ignored] }
+        createdAt: { type: string, format: date-time }
+
+    DeduplicationGroupDetails:
+      allOf:
+        - $ref: '#/components/schemas/DeduplicationGroup'
+        - type: object
+          properties:
+            leads:
+              type: array
+              items: { $ref: '#/components/schemas/Lead' }
+            fieldComparison:
+              type: object
+              properties:
+                sameFields:
+                  type: array
+                  items: { type: string }
+                differentFields:
+                  type: array
+                  items: { type: string }
+
+    EnrichmentJob:
+      type: object
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        promptTemplateId: { type: string }
+        status:
+          type: string
+          enum: [queued, processing, completed, partial, failed, cancelled]
+        progress:
+          type: object
+          properties:
+            totalLeads: { type: integer }
+            processedLeads: { type: integer }
+            successCount: { type: integer }
+            needsReviewCount: { type: integer }
+            failedCount: { type: integer }
+        usage:
+          type: object
+          properties:
+            promptTokens: { type: integer }
+            completionTokens: { type: integer }
+            estimatedCostUsd: { type: number, format: float }
+        createdAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+
+    EnrichmentLog:
+      type: object
+      properties:
+        id: { type: string }
+        leadId: { type: string }
+        jobId: { type: string }
+        tenantId: { type: string }
+        promptTemplateId: { type: string }
+        provider: { type: string }
+        model: { type: string }
+        prompt: { type: string }
+        rawResponse: { type: string }
+        parsedFields:
+          type: object
+          properties:
+            title: { type: string }
+            industry: { type: string }
+            companySize: { type: string }
+            summary: { type: string }
+            websiteSummary: { type: string }
+        reviewDecision:
+          type: string
+          enum: [auto_accept, needs_review, reject]
+        reviewReason: { type: string }
+        status: { type: string }
+        errorMessage: { type: string }
+        usage:
+          type: object
+          properties:
+            promptTokens: { type: integer }
+            completionTokens: { type: integer }
+            estimatedCostUsd: { type: number, format: float }
+        createdAt: { type: string, format: date-time }
+
+    ExportJob:
+      type: object
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        format: { type: string, enum: [instantly_csv] }
+        status: { type: string, enum: [queued, running, completed, failed] }
+        stats:
+          type: object
+          properties:
+            totalSelected: { type: integer }
+            exportedRows: { type: integer }
+            skippedRows: { type: integer }
+        skippedLeads:
+          type: array
+          items:
+            type: object
+            properties:
+              leadId: { type: string }
+              reason: { type: string }
+        downloadUrl: { type: string }
+        createdAt: { type: string, format: date-time }

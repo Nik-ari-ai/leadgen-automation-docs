@@ -1,0 +1,630 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.44.0">
+  <bpmn:message id="Msg_CSV" name="CSV_Upload" />
+  <bpmn:message id="Msg_AIResponse" name="AI_Response" />
+  <bpmn:message id="Msg_AIRequest" name="AI_Request" />
+  <bpmn:message id="Msg_Export" name="Export_CSV" />
+  <bpmn:collaboration id="Collab_1">
+    <bpmn:participant id="Pool_Main" name="LeadGen Automation" processRef="Process_LeadGen" />
+    <bpmn:participant id="Pool_DataSource" name="Источник данных(CSV/Google Sheets)" />
+    <bpmn:participant id="Pool_OpenAI" name="OpenAI API" />
+    <bpmn:participant id="Pool_Instantly" name="Instantly.ai" />
+    <bpmn:messageFlow id="MF_1" sourceRef="Pool_DataSource" targetRef="Start_Import" />
+    <bpmn:messageFlow id="MF_2" sourceRef="Task_SendAI" targetRef="Pool_OpenAI" />
+    <bpmn:messageFlow id="MF_3" sourceRef="Pool_OpenAI" targetRef="Task_ParseAI" />
+    <bpmn:messageFlow id="MF_4" sourceRef="Task_GenCSV" targetRef="Pool_Instantly" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_LeadGen" name="Подготовка базы лидов к outbound-кампании" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_System" name="Система LeadGen">
+        <bpmn:flowNodeRef>Task_Parse</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Validate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>GW_ValidData</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_InvalidData</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ImportReport</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_FindDups</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_MergeData</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_MergeLog</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CheckBudget</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>GW_BudgetOK</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_BudgetLimit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SendAI</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ParseAI</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ValidateExport</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_GenCSV</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_LogExport</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_FillFields</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_LogEnrich</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_DMN_Quality</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CreateLeads</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_User" name="SDR / Пользователь">
+        <bpmn:flowNodeRef>End_ExportIssue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Start_Import</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Upload</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ConfirmImport</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>GW_DupsFound</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ReviewDups</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>GW_MergeDups</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ChoosePrompt</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>GW_QualityResult</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ManualEdit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>GW_ExportReady</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_FilterExport</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Download</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Success</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SelectLeads</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ConfirmMerge</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_MapCols</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:endEvent id="End_ExportIssue" name="Проблемные лиды (нет email)" />
+    <bpmn:startEvent id="Start_Import" name="Файл получен от пользователя">
+      <bpmn:outgoing>F_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_1" messageRef="Msg_CSV" />
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Upload" name="Загрузить файл/вставить ссылку на Sheets">
+      <bpmn:incoming>F_01</bpmn:incoming>
+      <bpmn:outgoing>F_02</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_Parse" name="Распарсить файл и показать предпросмотр">
+      <bpmn:incoming>F_02</bpmn:incoming>
+      <bpmn:outgoing>F_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_ConfirmImport" name="Подтвердить импорт">
+      <bpmn:incoming>F_04</bpmn:incoming>
+      <bpmn:outgoing>F_05</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_Validate" name="Валидировать данные (email/LinkedIn)">
+      <bpmn:incoming>F_05</bpmn:incoming>
+      <bpmn:outgoing>F_06</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_ValidData" name="Данные валидны?">
+      <bpmn:incoming>F_06</bpmn:incoming>
+      <bpmn:outgoing>F_07_Yes</bpmn:outgoing>
+      <bpmn:outgoing>F_07_No</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_InvalidData" name="Импорт отклонён (нет email/LinkedIn)">
+      <bpmn:incoming>F_07_No</bpmn:incoming>
+      <bpmn:errorEventDefinition id="ErrDef_1" />
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="Task_ImportReport" name="Сохранить отчёт импорта">
+      <bpmn:incoming>F_08</bpmn:incoming>
+      <bpmn:outgoing>F_09</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_FindDups" name="Найти дубликаты (email/LinkedIn/домен+имя)">
+      <bpmn:incoming>F_09</bpmn:incoming>
+      <bpmn:outgoing>F_10</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_DupsFound" name="Дубли найдены?">
+      <bpmn:incoming>F_10</bpmn:incoming>
+      <bpmn:outgoing>F_11_Yes</bpmn:outgoing>
+      <bpmn:outgoing>F_11_No</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_ReviewDups" name="Просмотреть группы дублей и выбрать master">
+      <bpmn:incoming>F_11_Yes</bpmn:incoming>
+      <bpmn:outgoing>F_12</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_MergeData" name="Объединить данные дублей">
+      <bpmn:incoming>F_13</bpmn:incoming>
+      <bpmn:outgoing>F_14</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_MergeLog" name="Сохранить историю merge">
+      <bpmn:incoming>F_14</bpmn:incoming>
+      <bpmn:outgoing>F_15</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_MergeDups" name="">
+      <bpmn:incoming>F_11_No</bpmn:incoming>
+      <bpmn:incoming>F_15</bpmn:incoming>
+      <bpmn:outgoing>F_16</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_ChoosePrompt" name="Выбрать шаблон промпта">
+      <bpmn:incoming>F_17</bpmn:incoming>
+      <bpmn:outgoing>F_18</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_CheckBudget" name="Проверить бюджет/лимит AI">
+      <bpmn:incoming>F_18</bpmn:incoming>
+      <bpmn:outgoing>F_19</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_BudgetOK" name="Бюджет в норме?">
+      <bpmn:incoming>F_19</bpmn:incoming>
+      <bpmn:outgoing>F_20_Yes</bpmn:outgoing>
+      <bpmn:outgoing>F_20_No</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_BudgetLimit" name="Лимит AI превышен">
+      <bpmn:incoming>F_20_No</bpmn:incoming>
+      <bpmn:errorEventDefinition id="ErrDef_2" />
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="Task_SendAI" name="Отправить запрос в OpenAI API">
+      <bpmn:incoming>F_20_Yes</bpmn:incoming>
+      <bpmn:outgoing>F_21</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_ParseAI" name="Получить и распарсить ответ AI">
+      <bpmn:incoming>F_21</bpmn:incoming>
+      <bpmn:outgoing>F_22</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_QualityResult" name="Результат оценки?">
+      <bpmn:incoming>F_25</bpmn:incoming>
+      <bpmn:outgoing>F_26_Review</bpmn:outgoing>
+      <bpmn:outgoing>F_26_OK</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_ManualEdit" name="Проверить и поправить поля вручную">
+      <bpmn:incoming>F_26_Review</bpmn:incoming>
+      <bpmn:outgoing>F_27</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="GW_ExportReady" name="">
+      <bpmn:incoming>F_26_OK</bpmn:incoming>
+      <bpmn:incoming>F_27</bpmn:incoming>
+      <bpmn:outgoing>F_28</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_FilterExport" name="Отфильтровать лидов (статус Ready)">
+      <bpmn:incoming>F_28</bpmn:incoming>
+      <bpmn:outgoing>F_29</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_ValidateExport" name="Проверить обязательные поля для экспорта">
+      <bpmn:incoming>F_29</bpmn:incoming>
+      <bpmn:outgoing>F_30</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_GenCSV" name="Сформировать CSV под формат Instantly">
+      <bpmn:incoming>F_30</bpmn:incoming>
+      <bpmn:outgoing>F_31</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_Download" name="Скачать CSV">
+      <bpmn:incoming>F_31</bpmn:incoming>
+      <bpmn:outgoing>F_32</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_LogExport" name="Сохранить лог экспорта">
+      <bpmn:incoming>F_32</bpmn:incoming>
+      <bpmn:outgoing>F_33</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_Success" name="База готова, экспорт завершён">
+      <bpmn:incoming>F_33</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="Task_FillFields" name="Заполнить поля лидов результатами AI">
+      <bpmn:incoming>F_22</bpmn:incoming>
+      <bpmn:outgoing>F_23</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_LogEnrich" name="Сохранить лог enrichment (промпт/ответ/стоимость)">
+      <bpmn:incoming>F_23</bpmn:incoming>
+      <bpmn:outgoing>F_24</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:businessRuleTask id="Task_DMN_Quality" name="Оценить качество AI-ответа" camunda:decisionRef="Decision_Quality">
+      <bpmn:incoming>F_24</bpmn:incoming>
+      <bpmn:outgoing>F_25</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:userTask id="Task_SelectLeads" name="Выбрать лидов для enrichment">
+      <bpmn:incoming>F_16</bpmn:incoming>
+      <bpmn:outgoing>F_17</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_ConfirmMerge" name="Подтвердить merge">
+      <bpmn:incoming>F_12</bpmn:incoming>
+      <bpmn:outgoing>F_13</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_CreateLeads" name="Создать лидов в БД">
+      <bpmn:incoming>F_07_Yes</bpmn:incoming>
+      <bpmn:outgoing>F_08</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_MapCols" name="Сопоставить колонки с полями системы">
+      <bpmn:incoming>F_03</bpmn:incoming>
+      <bpmn:outgoing>F_04</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="F_01" sourceRef="Start_Import" targetRef="Task_Upload" />
+    <bpmn:sequenceFlow id="F_02" sourceRef="Task_Upload" targetRef="Task_Parse" />
+    <bpmn:sequenceFlow id="F_03" sourceRef="Task_Parse" targetRef="Task_MapCols" />
+    <bpmn:sequenceFlow id="F_04" sourceRef="Task_MapCols" targetRef="Task_ConfirmImport" />
+    <bpmn:sequenceFlow id="F_05" sourceRef="Task_ConfirmImport" targetRef="Task_Validate" />
+    <bpmn:sequenceFlow id="F_06" sourceRef="Task_Validate" targetRef="GW_ValidData" />
+    <bpmn:sequenceFlow id="F_07_Yes" name="Да" sourceRef="GW_ValidData" targetRef="Task_CreateLeads" />
+    <bpmn:sequenceFlow id="F_07_No" name="Нет" sourceRef="GW_ValidData" targetRef="End_InvalidData" />
+    <bpmn:sequenceFlow id="F_08" sourceRef="Task_CreateLeads" targetRef="Task_ImportReport" />
+    <bpmn:sequenceFlow id="F_09" sourceRef="Task_ImportReport" targetRef="Task_FindDups" />
+    <bpmn:sequenceFlow id="F_10" sourceRef="Task_FindDups" targetRef="GW_DupsFound" />
+    <bpmn:sequenceFlow id="F_11_Yes" name="Да" sourceRef="GW_DupsFound" targetRef="Task_ReviewDups" />
+    <bpmn:sequenceFlow id="F_11_No" name="Нет" sourceRef="GW_DupsFound" targetRef="GW_MergeDups" />
+    <bpmn:sequenceFlow id="F_12" sourceRef="Task_ReviewDups" targetRef="Task_ConfirmMerge" />
+    <bpmn:sequenceFlow id="F_13" sourceRef="Task_ConfirmMerge" targetRef="Task_MergeData" />
+    <bpmn:sequenceFlow id="F_14" sourceRef="Task_MergeData" targetRef="Task_MergeLog" />
+    <bpmn:sequenceFlow id="F_15" sourceRef="Task_MergeLog" targetRef="GW_MergeDups" />
+    <bpmn:sequenceFlow id="F_16" sourceRef="GW_MergeDups" targetRef="Task_SelectLeads" />
+    <bpmn:sequenceFlow id="F_17" sourceRef="Task_SelectLeads" targetRef="Task_ChoosePrompt" />
+    <bpmn:sequenceFlow id="F_18" sourceRef="Task_ChoosePrompt" targetRef="Task_CheckBudget" />
+    <bpmn:sequenceFlow id="F_19" sourceRef="Task_CheckBudget" targetRef="GW_BudgetOK" />
+    <bpmn:sequenceFlow id="F_20_Yes" name="Да" sourceRef="GW_BudgetOK" targetRef="Task_SendAI" />
+    <bpmn:sequenceFlow id="F_20_No" name="Нет" sourceRef="GW_BudgetOK" targetRef="End_BudgetLimit" />
+    <bpmn:sequenceFlow id="F_21" sourceRef="Task_SendAI" targetRef="Task_ParseAI" />
+    <bpmn:sequenceFlow id="F_22" sourceRef="Task_ParseAI" targetRef="Task_FillFields" />
+    <bpmn:sequenceFlow id="F_25" sourceRef="Task_DMN_Quality" targetRef="GW_QualityResult" />
+    <bpmn:sequenceFlow id="F_26_Review" name="Needs review" sourceRef="GW_QualityResult" targetRef="Task_ManualEdit" />
+    <bpmn:sequenceFlow id="F_26_OK" name="OK" sourceRef="GW_QualityResult" targetRef="GW_ExportReady" />
+    <bpmn:sequenceFlow id="F_27" sourceRef="Task_ManualEdit" targetRef="GW_ExportReady" />
+    <bpmn:sequenceFlow id="F_28" sourceRef="GW_ExportReady" targetRef="Task_FilterExport" />
+    <bpmn:sequenceFlow id="F_29" sourceRef="Task_FilterExport" targetRef="Task_ValidateExport" />
+    <bpmn:sequenceFlow id="F_30" sourceRef="Task_ValidateExport" targetRef="Task_GenCSV" />
+    <bpmn:sequenceFlow id="F_31" sourceRef="Task_GenCSV" targetRef="Task_Download" />
+    <bpmn:sequenceFlow id="F_32" sourceRef="Task_Download" targetRef="Task_LogExport" />
+    <bpmn:sequenceFlow id="F_33" sourceRef="Task_LogExport" targetRef="End_Success" />
+    <bpmn:sequenceFlow id="F_23" sourceRef="Task_FillFields" targetRef="Task_LogEnrich" />
+    <bpmn:sequenceFlow id="F_24" sourceRef="Task_LogEnrich" targetRef="Task_DMN_Quality" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collab_1">
+      <bpmndi:BPMNShape id="Pool_DataSource_di" bpmnElement="Pool_DataSource" isHorizontal="true">
+        <dc:Bounds x="350" y="80" width="300" height="60" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_OpenAI_di" bpmnElement="Pool_OpenAI" isHorizontal="true">
+        <dc:Bounds x="2340" y="80" width="500" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_Instantly_di" bpmnElement="Pool_Instantly" isHorizontal="true">
+        <dc:Bounds x="3580" y="80" width="340" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_Main_di" bpmnElement="Pool_Main" isHorizontal="true">
+        <dc:Bounds x="157" y="215" width="3815" height="490" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_System_di" bpmnElement="Lane_System" isHorizontal="true">
+        <dc:Bounds x="187" y="445" width="3785" height="260" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_User_di" bpmnElement="Lane_User" isHorizontal="true">
+        <dc:Bounds x="187" y="215" width="3785" height="230" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Import_di" bpmnElement="Start_Import">
+        <dc:Bounds x="229" y="297" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="214" y="340" width="86" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Upload_di" bpmnElement="Task_Upload">
+        <dc:Bounds x="307" y="275" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Parse_di" bpmnElement="Task_Parse">
+        <dc:Bounds x="307" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ConfirmImport_di" bpmnElement="Task_ConfirmImport">
+        <dc:Bounds x="597" y="275" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Validate_di" bpmnElement="Task_Validate">
+        <dc:Bounds x="597" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_ValidData_di" bpmnElement="GW_ValidData" isMarkerVisible="true">
+        <dc:Bounds x="742" y="540" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="711" y="581" width="51" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_InvalidData_di" bpmnElement="End_InvalidData">
+        <dc:Bounds x="749" y="647" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="792" y="655" width="89" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ImportReport_di" bpmnElement="Task_ImportReport">
+        <dc:Bounds x="977" y="525" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_FindDups_di" bpmnElement="Task_FindDups">
+        <dc:Bounds x="1117" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_DupsFound_di" bpmnElement="GW_DupsFound" isMarkerVisible="true">
+        <dc:Bounds x="1142" y="290" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1124" y="266" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReviewDups_di" bpmnElement="Task_ReviewDups">
+        <dc:Bounds x="1237" y="275" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_MergeData_di" bpmnElement="Task_MergeData">
+        <dc:Bounds x="1377" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_MergeLog_di" bpmnElement="Task_MergeLog">
+        <dc:Bounds x="1517" y="525" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_MergeDups_di" bpmnElement="GW_MergeDups" isMarkerVisible="true">
+        <dc:Bounds x="1632" y="290" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ChoosePrompt_di" bpmnElement="Task_ChoosePrompt">
+        <dc:Bounds x="1867" y="275" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CheckBudget_di" bpmnElement="Task_CheckBudget">
+        <dc:Bounds x="2007" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_BudgetOK_di" bpmnElement="GW_BudgetOK" isMarkerVisible="true">
+        <dc:Bounds x="2142" y="540" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2122" y="518" width="90" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_BudgetLimit_di" bpmnElement="End_BudgetLimit">
+        <dc:Bounds x="2149" y="647" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2190" y="661" width="53" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SendAI_di" bpmnElement="Task_SendAI">
+        <dc:Bounds x="2237" y="525" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ParseAI_di" bpmnElement="Task_ParseAI">
+        <dc:Bounds x="2377" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_QualityResult_di" bpmnElement="GW_QualityResult" isMarkerVisible="true">
+        <dc:Bounds x="2822" y="290" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2791" y="261" width="51" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ManualEdit_di" bpmnElement="Task_ManualEdit">
+        <dc:Bounds x="2917" y="275" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW_ExportReady_di" bpmnElement="GW_ExportReady" isMarkerVisible="true">
+        <dc:Bounds x="3052" y="290" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_FilterExport_di" bpmnElement="Task_FilterExport">
+        <dc:Bounds x="3137" y="275" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ValidateExport_di" bpmnElement="Task_ValidateExport">
+        <dc:Bounds x="3277" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_GenCSV_di" bpmnElement="Task_GenCSV">
+        <dc:Bounds x="3417" y="525" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Download_di" bpmnElement="Task_Download">
+        <dc:Bounds x="3537" y="275" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_LogExport_di" bpmnElement="Task_LogExport">
+        <dc:Bounds x="3677" y="525" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Success_di" bpmnElement="End_Success">
+        <dc:Bounds x="3839" y="297" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3875" y="340" width="64" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_FillFields_di" bpmnElement="Task_FillFields">
+        <dc:Bounds x="2507" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_LogEnrich_di" bpmnElement="Task_LogEnrich">
+        <dc:Bounds x="2627" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_DMN_Quality_di" bpmnElement="Task_DMN_Quality">
+        <dc:Bounds x="2777" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SelectLeads_di" bpmnElement="Task_SelectLeads">
+        <dc:Bounds x="1707" y="275" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ConfirmMerge_di" bpmnElement="Task_ConfirmMerge">
+        <dc:Bounds x="1397" y="275" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CreateLeads_di" bpmnElement="Task_CreateLeads">
+        <dc:Bounds x="827" y="525" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_MapCols_di" bpmnElement="Task_MapCols">
+        <dc:Bounds x="447" y="275" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F_01_di" bpmnElement="F_01">
+        <di:waypoint x="265" y="315" />
+        <di:waypoint x="307" y="315" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_02_di" bpmnElement="F_02">
+        <di:waypoint x="357" y="355" />
+        <di:waypoint x="357" y="525" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_03_di" bpmnElement="F_03">
+        <di:waypoint x="407" y="565" />
+        <di:waypoint x="497" y="565" />
+        <di:waypoint x="497" y="355" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_04_di" bpmnElement="F_04">
+        <di:waypoint x="547" y="315" />
+        <di:waypoint x="597" y="315" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_05_di" bpmnElement="F_05">
+        <di:waypoint x="647" y="355" />
+        <di:waypoint x="647" y="525" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_06_di" bpmnElement="F_06">
+        <di:waypoint x="697" y="565" />
+        <di:waypoint x="742" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_07_Yes_di" bpmnElement="F_07_Yes">
+        <di:waypoint x="792" y="565" />
+        <di:waypoint x="827" y="565" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="803" y="547" width="14" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_07_No_di" bpmnElement="F_07_No">
+        <di:waypoint x="767" y="590" />
+        <di:waypoint x="767" y="647" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="775" y="628" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_08_di" bpmnElement="F_08">
+        <di:waypoint x="927" y="565" />
+        <di:waypoint x="977" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_09_di" bpmnElement="F_09">
+        <di:waypoint x="1077" y="565" />
+        <di:waypoint x="1117" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_10_di" bpmnElement="F_10">
+        <di:waypoint x="1167" y="525" />
+        <di:waypoint x="1167" y="340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_11_Yes_di" bpmnElement="F_11_Yes">
+        <di:waypoint x="1192" y="315" />
+        <di:waypoint x="1237" y="315" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1208" y="297" width="14" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_11_No_di" bpmnElement="F_11_No">
+        <di:waypoint x="1167" y="290" />
+        <di:waypoint x="1167" y="265" />
+        <di:waypoint x="1657" y="265" />
+        <di:waypoint x="1657" y="290" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1398" y="247" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_12_di" bpmnElement="F_12">
+        <di:waypoint x="1337" y="315" />
+        <di:waypoint x="1397" y="315" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_13_di" bpmnElement="F_13">
+        <di:waypoint x="1447" y="355" />
+        <di:waypoint x="1447" y="440" />
+        <di:waypoint x="1427" y="440" />
+        <di:waypoint x="1427" y="525" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_14_di" bpmnElement="F_14">
+        <di:waypoint x="1477" y="565" />
+        <di:waypoint x="1517" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_15_di" bpmnElement="F_15">
+        <di:waypoint x="1617" y="565" />
+        <di:waypoint x="1657" y="565" />
+        <di:waypoint x="1657" y="340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_16_di" bpmnElement="F_16">
+        <di:waypoint x="1682" y="315" />
+        <di:waypoint x="1707" y="315" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_17_di" bpmnElement="F_17">
+        <di:waypoint x="1807" y="315" />
+        <di:waypoint x="1867" y="315" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_18_di" bpmnElement="F_18">
+        <di:waypoint x="1917" y="355" />
+        <di:waypoint x="1917" y="565" />
+        <di:waypoint x="2007" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_19_di" bpmnElement="F_19">
+        <di:waypoint x="2107" y="565" />
+        <di:waypoint x="2142" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_20_Yes_di" bpmnElement="F_20_Yes">
+        <di:waypoint x="2192" y="565" />
+        <di:waypoint x="2237" y="565" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2208" y="547" width="14" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_20_No_di" bpmnElement="F_20_No">
+        <di:waypoint x="2167" y="590" />
+        <di:waypoint x="2167" y="647" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2175" y="611" width="19" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_21_di" bpmnElement="F_21">
+        <di:waypoint x="2337" y="565" />
+        <di:waypoint x="2377" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_22_di" bpmnElement="F_22">
+        <di:waypoint x="2477" y="565" />
+        <di:waypoint x="2507" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_25_di" bpmnElement="F_25">
+        <di:waypoint x="2827" y="525" />
+        <di:waypoint x="2827" y="433" />
+        <di:waypoint x="2847" y="433" />
+        <di:waypoint x="2847" y="340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_26_Review_di" bpmnElement="F_26_Review">
+        <di:waypoint x="2872" y="315" />
+        <di:waypoint x="2917" y="315" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2853" y="283" width="67" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_26_OK_di" bpmnElement="F_26_OK">
+        <di:waypoint x="2847" y="290" />
+        <di:waypoint x="2847" y="255" />
+        <di:waypoint x="3077" y="255" />
+        <di:waypoint x="3077" y="290" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2957" y="237" width="16" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_27_di" bpmnElement="F_27">
+        <di:waypoint x="3017" y="315" />
+        <di:waypoint x="3052" y="315" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_28_di" bpmnElement="F_28">
+        <di:waypoint x="3102" y="315" />
+        <di:waypoint x="3137" y="315" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_29_di" bpmnElement="F_29">
+        <di:waypoint x="3187" y="355" />
+        <di:waypoint x="3187" y="565" />
+        <di:waypoint x="3277" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_30_di" bpmnElement="F_30">
+        <di:waypoint x="3377" y="565" />
+        <di:waypoint x="3417" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_31_di" bpmnElement="F_31">
+        <di:waypoint x="3517" y="565" />
+        <di:waypoint x="3587" y="565" />
+        <di:waypoint x="3587" y="355" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_32_di" bpmnElement="F_32">
+        <di:waypoint x="3637" y="315" />
+        <di:waypoint x="3677" y="315" />
+        <di:waypoint x="3677" y="565" />
+        <di:waypoint x="3677" y="525" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_33_di" bpmnElement="F_33">
+        <di:waypoint x="3777" y="565" />
+        <di:waypoint x="3857" y="565" />
+        <di:waypoint x="3857" y="333" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_23_di" bpmnElement="F_23">
+        <di:waypoint x="2607" y="565" />
+        <di:waypoint x="2627" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_24_di" bpmnElement="F_24">
+        <di:waypoint x="2727" y="565" />
+        <di:waypoint x="2777" y="565" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_1_di" bpmnElement="MF_1">
+        <di:waypoint x="355" y="140" />
+        <di:waypoint x="355" y="219" />
+        <di:waypoint x="247" y="219" />
+        <di:waypoint x="247" y="297" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_2_di" bpmnElement="MF_2">
+        <di:waypoint x="2287" y="525" />
+        <di:waypoint x="2287" y="333" />
+        <di:waypoint x="2395" y="333" />
+        <di:waypoint x="2395" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_3_di" bpmnElement="MF_3">
+        <di:waypoint x="2427" y="140" />
+        <di:waypoint x="2427" y="525" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_4_di" bpmnElement="MF_4">
+        <di:waypoint x="3467" y="525" />
+        <di:waypoint x="3467" y="333" />
+        <di:waypoint x="3650" y="333" />
+        <di:waypoint x="3650" y="140" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
